@@ -47,23 +47,34 @@ typedef struct
 
 static Connection conns[MAX_CONNS];
 
-static long tcp_count = 0;
-static long udp_count = 0;
-static long other_ip_count = 0;
-static long non_ip_count = 0;
-static long ipv6_count = 0;
-static long arp_count = 0;
+static long total_count = 0, total_bytes = 0;
+static long tcp_count = 0, tcp_bytes = 0;
+static long udp_count = 0, udp_bytes = 0;
+static long icmp_count = 0, icmp_bytes = 0;
+static long arp_count = 0, arp_bytes = 0;
+static long ipv6_count = 0, ipv6_bytes = 0;
+static long other_ip_count = 0, other_ip_bytes = 0;
+static long non_ip_count = 0, non_ip_bytes = 0;
 
 // finds a new connection
 int connection_found(const unsigned char *src_ip, const unsigned char *dst_ip, int src_port, int dst_port)
 {
+    // Sort the two endpoints so both directions produce the same key
+    int swap = (memcmp(src_ip, dst_ip, 4) > 0) ||
+               (memcmp(src_ip, dst_ip, 4) == 0 && src_port > dst_port);
+
+    const unsigned char *lo_ip = swap ? dst_ip : src_ip;
+    const unsigned char *hi_ip = swap ? src_ip : dst_ip;
+    int lo_port = swap ? dst_port : src_port;
+    int hi_port = swap ? src_port : dst_port;
+
     for (int i = 0; i < MAX_CONNS; i++)
     {
         if (conns[i].in_use &&
-            memcmp(conns[i].src_ip, src_ip, 4) == 0 &&
-            memcmp(conns[i].dst_ip, dst_ip, 4) == 0 &&
-            conns[i].src_port == src_port &&
-            conns[i].dst_port == dst_port)
+            memcmp(conns[i].src_ip, lo_ip, 4) == 0 &&
+            memcmp(conns[i].dst_ip, hi_ip, 4) == 0 &&
+            conns[i].src_port == lo_port &&
+            conns[i].dst_port == hi_port)
         {
             return i;
         }
@@ -73,10 +84,10 @@ int connection_found(const unsigned char *src_ip, const unsigned char *dst_ip, i
         if (!conns[i].in_use)
         {
             conns[i].in_use = 1;
-            memcpy(conns[i].src_ip, src_ip, 4);
-            memcpy(conns[i].dst_ip, dst_ip, 4);
-            conns[i].src_port = src_port;
-            conns[i].dst_port = dst_port;
+            memcpy(conns[i].src_ip, lo_ip, 4);
+            memcpy(conns[i].dst_ip, hi_ip, 4);
+            conns[i].src_port = lo_port;
+            conns[i].dst_port = hi_port;
             conns[i].syn_seen = 0;
             conns[i].synack_seen = 0;
             conns[i].established = 0;
@@ -88,13 +99,15 @@ int connection_found(const unsigned char *src_ip, const unsigned char *dst_ip, i
 
 void capture_stats()
 {
-    printf("\nCapture Statistics:\n");
-    printf("TCP Packets: %ld\n", tcp_count);
-    printf("UDP Packets: %ld\n", udp_count);
-    printf("Other IP Packets: %ld\n", other_ip_count);
-    printf("Non-IP Packets: %ld\n", non_ip_count);
-    printf("IPv6 Packets: %ld\n", ipv6_count);
-    printf("ARP Packets: %ld\n", arp_count);
+    printf("\nProtocol      Packets        Bytes\n");
+    printf("TCP        %10ld %12ld\n", tcp_count, tcp_bytes);
+    printf("UDP        %10ld %12ld\n", udp_count, udp_bytes);
+    printf("ICMP       %10ld %12ld\n", icmp_count, icmp_bytes);
+    printf("ARP        %10ld %12ld\n", arp_count, arp_bytes);
+    printf("IPv6       %10ld %12ld\n", ipv6_count, ipv6_bytes);
+    printf("Other IPv4 %10ld %12ld\n", other_ip_count, other_ip_bytes);
+    printf("Non-IP     %10ld %12ld\n", non_ip_count, non_ip_bytes);
+    printf("Total      %10ld %12ld\n", total_count, total_bytes);
 }
 
 const char *icmp_name(int type)
@@ -162,12 +175,14 @@ const char *port_name(int port)
 }
 
 // ipv6 address is 16 bytes long, print it in hex format with colons
-
-void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *data)
+void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_char *data)
 {
+    total_count++;
+    total_bytes += header->len;
     pcap_dump(dumper_arg, header, data); // save this packet to out.pcap
     int len = (int)header->caplen;
-    if (header->caplen < 14)
+
+    if (header->len < 14)
     {
         return;
         // too short to contain Ethernet header
@@ -183,7 +198,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     int ether_type = (data[12] << 8) | data[13];
     int protocol = -1; // 6 TCP, 17 UDP, anything else = other
     int t = 0;         // where the TCP/UDP header starts
-    int is_ipv4 = 0;
+    // int is_ipv4 = 0;
 
     // IPv4
     if (ether_type == 0x0800)
@@ -193,7 +208,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
             printf(" Not a complete IPv4 header\n");
             return;
         }
-        is_ipv4 = 1;
+        // is_ipv4 = 1;
         t = 14 + (data[14] & 0x0F) * 4;
         protocol = data[23];
 
@@ -212,6 +227,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     else if (ether_type == 0x86DD)
     {
         ipv6_count++;
+        ipv6_bytes += header->caplen;
 
         if (header->caplen < 54)
         {
@@ -247,6 +263,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     else if (ether_type == 0x0806)
     {
         arp_count++;
+        arp_bytes += header->caplen;
 
         printf(" ARP Packet\n");
 
@@ -268,6 +285,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     {
         printf(" Not an IPv4 or IPv6 packet\n");
         non_ip_count++;
+        non_ip_bytes += header->caplen;
         return;
     }
 
@@ -276,17 +294,21 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     if (protocol == 6)
     {
         tcp_count++;
+        tcp_bytes += header->caplen;
         printf(" Protocol: TCP\n");
     }
     else if (protocol == 17)
     {
         udp_count++;
+        udp_bytes += header->caplen;
         printf(" Protocol: UDP\n");
     }
     else if (protocol == 1)
     {
+        icmp_count++;
+        icmp_bytes += header->caplen;
         printf(" Protocol: ICMP\n");
-        if (header->caplen < t + 2)
+        if (len < t + 2)
         {
             printf(" Not complete ICMP Header");
             return;
@@ -301,11 +323,12 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     else
     {
         other_ip_count++;
+        other_ip_bytes += header->caplen;
         printf(" Protocol: Other (%d)\n", protocol);
         return;
     }
 
-    if (header->caplen < t + 4)
+    if (len < t + 4)
     {
         printf(" Not complete TCP/UDP Header");
         return;
@@ -422,10 +445,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (pcap_loop(pcap, 25, packet_got, NULL) == -1)
+    if (pcap_loop(pcap, 25, packet_got, (u_char *)dumper) == -1)
     {
         printf("Error: %s\n", pcap_geterr(pcap));
     }
+
+    pcap_dump_close(dumper);
     capture_stats();
     pcap_close(pcap);
     return 0;

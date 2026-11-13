@@ -39,6 +39,11 @@ that gave wrong ports icmp types and tcp header lengths
     - t is now cacl. as `14 + HLEN*4` for ipv4 (54 for v6) and every port tcp udp and icmp reads it 
 11. Saved caputre in `out.pcap`: pcap_dump write every packet, and u can open it in wireshark
     - added fragment offset  and skip ip fragments
+12. Counted bytes/portocol 
+    - updated `capture_stats()` and added a table like thing to show no. of captures and bytes
+    -  TCP UDP ICMP ARP IPv6 other IPv4 and non-IP and the toal
+    - each protocols bytes use the full packet length (`header-> length`)
+
 
 ## Build and Run
 
