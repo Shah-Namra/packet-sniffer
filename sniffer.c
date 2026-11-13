@@ -181,7 +181,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     int ether_type = (data[12] << 8) | data[13];
     int protocol = -1; // 6 TCP, 17 UDP, anything else = other
     int t = 0;         // where the TCP/UDP header starts
-    bool is_ipv4 = 0;
+    int is_ipv4 = 0;
 
     // IPv4
     if (ether_type == 0x0800)
@@ -192,7 +192,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
             return;
         }
         is_ipv4 = 1;
-        int ip_header_length = (data[14] & 0x0F) * 4; // HLEN = 4bits, multiple of 4, 15th bit
+        t = (data[14] & 0x0F) * 4; // HLEN = 4bits, multiple of 4, 15th bit
         protocol = data[23];
 
         printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
@@ -285,7 +285,6 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         int icmp_type = data[t];
         int icmp_code = data[t + 1];
 
-        printf("protocol ICMP\n");
         printf("ICMP Type: %d (%s)\n", icmp_type, icmp_name(icmp_type));
         printf("ICMP Code: %d\n", icmp_code);
         return; // no ICMP ports to display
@@ -303,8 +302,8 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         return;
     }
 
-    int src_port = (data[34] << 8) | data[35];
-    int dst_port = (data[36] << 8) | data[37];
+    int src_port = (data[t] << 8) | data[t + 1];
+    int dst_port = (data[t + 2] << 8) | data[t + 3];
     printf(" SRC PORT: %d (%s)\n", src_port, port_name(src_port));
     printf(" DST PORT: %d (%s)\n", dst_port, port_name(dst_port));
 

@@ -33,6 +33,10 @@
 9. Added Connection Tracking and packet decoding improved
     - `find_connection()` stores each connection and labels its state
     - ports and UDP fields use t, which handles IPv4 options and IPv6
+10. 
+    - the transport header position `t` was not dynamic and TCP UDP ICMP was read fixed byte position. 
+that gave wrong ports icmp types and tcp header lengths
+    - t is now cacl. as `14 + HLEN*4` for ipv4 (54 for v6) and every port tcp udp and icmp reads it 
 
 ## Build and Run
 
