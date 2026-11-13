@@ -19,6 +19,11 @@
 4. Printed SRC Mac, DST Mac and timestamp, ethernet type, and captured size
 5. Printed TCP UDP Ports with IPs
     - also added IPv4 related information like flafs fragment offset ttle checksum and all
+    - From HLEN we get to know from where tcp/udp jeader is starting
+6. Added Port no. 
+    - `port_name()`: shows the common ports to names
+    - Ukown ports only prints the number
+
 
 ## Build and Run
 

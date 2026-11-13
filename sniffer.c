@@ -30,6 +30,39 @@
 // 40-41 UDP Checksum
 // 42 onwards: Payload
 
+const char *port_name(int port)
+{
+    switch (port)
+    {
+    case 20:
+        return "FTP Data";
+    case 21:
+        return "FTP Control";
+    case 22:
+        return "SSH";
+    case 23:
+        return "Telnet";
+    case 25:
+        return "SMTP";
+    case 53:
+        return "DNS";
+    case 67:
+        return "DHCP Server";
+    case 68:
+        return "DHCP Client";
+    case 80:
+        return "HTTP";
+    case 110:
+        return "POP3";
+    case 143:
+        return "IMAP";
+    case 443:
+        return "HTTPS";
+    default:
+        return "Unknown";
+    }
+}
+
 void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *data)
 {
     if (header->caplen < 14)
@@ -63,18 +96,18 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
     printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
 
-    //printf(" Version: %d\n", data[14] >> 4);
-    //printf(" IP Header Length: %d bytes\n", ip_header_length);
-    //printf(" TOS: 0x%02x\n", data[15]);
-    //printf(" Total Length: %d\n", (data[16] << 8) | data[17]);
-    //printf(" Identification: 0x%02x%02x\n", data[18], data[19]);
-    //printf(" Flags: %d\n", (data[20] >> 5) & 0x07);
-    //printf(" Fragment Offset: %d\n", ((data[20] & 0x1F) << 8) | data[21]);
-    //printf(" TTL: %d\n", data[22]);
-    //printf(" Protocol: %d\n", data[23]);
-    //printf(" Header Checksum: 0x%02x%02x\n", data[24], data[25]);
-    //printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
-    //printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
+    // printf(" Version: %d\n", data[14] >> 4);
+    // printf(" IP Header Length: %d bytes\n", ip_header_length);
+    // printf(" TOS: 0x%02x\n", data[15]);
+    // printf(" Total Length: %d\n", (data[16] << 8) | data[17]);
+    // printf(" Identification: 0x%02x%02x\n", data[18], data[19]);
+    // printf(" Flags: %d\n", (data[20] >> 5) & 0x07);
+    // printf(" Fragment Offset: %d\n", ((data[20] & 0x1F) << 8) | data[21]);
+    // printf(" TTL: %d\n", data[22]);
+    // printf(" Protocol: %d\n", data[23]);
+    // printf(" Header Checksum: 0x%02x%02x\n", data[24], data[25]);
+    // printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
+    // printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
 
     // for tcp udp
     //
@@ -98,8 +131,8 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
 
     int src_port = (data[transport_header_offset] << 8) | data[transport_header_offset + 1];
     int dst_port = (data[transport_header_offset + 2] << 8) | data[transport_header_offset + 3];
-    printf(" SRC PORT: %d\n", src_port);
-    printf(" DST PORT: %d\n", dst_port);
+    printf(" SRC PORT: %d (%s)\n", src_port, port_name(src_port));
+    printf(" DST PORT: %d (%s)\n", dst_port, port_name(dst_port));
 }
 
 int main(int argc, char *argv[])
