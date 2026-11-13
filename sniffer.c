@@ -165,6 +165,8 @@ const char *port_name(int port)
 
 void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *data)
 {
+    pcap_dump(dumper_arg, header, data); // save this packet to out.pcap
+    int len = (int)header->caplen;
     if (header->caplen < 14)
     {
         return;
@@ -192,11 +194,18 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
             return;
         }
         is_ipv4 = 1;
-        t = (data[14] & 0x0F) * 4; // HLEN = 4bits, multiple of 4, 15th bit
+        t = 14 + (data[14] & 0x0F) * 4;
         protocol = data[23];
 
         printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
         printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
+
+        int frag_offset = ((data[20] & 0x1F) << 8) | data[21];
+        if (frag_offset != 0)
+        {
+            printf(" IP Fragmented packet, offset: %d\n", frag_offset);
+            return;
+        }
     }
 
     // for ipv6
@@ -397,6 +406,19 @@ int main(int argc, char *argv[])
     if (pcap == NULL)
     {
         printf(" Some error: %s\n", err);
+        return 1;
+    }
+
+    if (pcap_datalink(pcap) != DLT_EN10MB)
+    {
+        printf(" Not an Ethernet interface\n");
+        return 1;
+    }
+    pcap_dumper_t *dumper = pcap_dump_open(pcap, "out.pcap");
+    if (dumper == NULL)
+    {
+        printf("Error: %s\n", pcap_geterr(pcap));
+        pcap_close(pcap);
         return 1;
     }
 

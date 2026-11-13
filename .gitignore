@@ -2,3 +2,4 @@ sniffer
 sniffer.exe
 *.o
 *.deb
+out.pcap
