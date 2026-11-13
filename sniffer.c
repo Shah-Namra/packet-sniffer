@@ -1,5 +1,8 @@
 #include <pcap.h>
 #include <stdio.h>
+#include <string.h>
+
+#define MAX_CONNS 100
 
 // ethernet packet:
 // 0-5: Destination MAC
@@ -30,12 +33,58 @@
 // 40-41 UDP Checksum
 // 42 onwards: Payload
 
+typedef struct
+{
+    unsigned char src_ip[4];
+    unsigned char dst_ip[4];
+    int src_port;
+    int dst_port;
+    int in_use;
+    int syn_seen;
+    int synack_seen;
+    int established;
+} Connection;
+
+static Connection conns[MAX_CONNS];
+
 static long tcp_count = 0;
 static long udp_count = 0;
 static long other_ip_count = 0;
 static long non_ip_count = 0;
 static long ipv6_count = 0;
 static long arp_count = 0;
+
+// finds a new connection
+int connection_found(const unsigned char *src_ip, const unsigned char *dst_ip, int src_port, int dst_port)
+{
+    for (int i = 0; i < MAX_CONNS; i++)
+    {
+        if (conns[i].in_use &&
+            memcmp(conns[i].src_ip, src_ip, 4) == 0 &&
+            memcmp(conns[i].dst_ip, dst_ip, 4) == 0 &&
+            conns[i].src_port == src_port &&
+            conns[i].dst_port == dst_port)
+        {
+            return i;
+        }
+    }
+    for (int i = 0; i < MAX_CONNS; i++)
+    {
+        if (!conns[i].in_use)
+        {
+            conns[i].in_use = 1;
+            memcpy(conns[i].src_ip, src_ip, 4);
+            memcpy(conns[i].dst_ip, dst_ip, 4);
+            conns[i].src_port = src_port;
+            conns[i].dst_port = dst_port;
+            conns[i].syn_seen = 0;
+            conns[i].synack_seen = 0;
+            conns[i].established = 0;
+            return i;
+        }
+    }
+    return -1; // table is full
+}
 
 void capture_stats()
 {
@@ -121,6 +170,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         return;
         // too short to contain Ethernet header
     }
+
     printf("\n Packet size: %u bytes\n", header->len);
     printf("Captured size: %u bytes\n", header->caplen);
     printf(" Dest MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[0], data[1], data[2], data[3], data[4], data[5]);
@@ -131,21 +181,9 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     int ether_type = (data[12] << 8) | data[13];
     int protocol = -1; // 6 TCP, 17 UDP, anything else = other
     int t = 0;         // where the TCP/UDP header starts
-    // now for ipv4, SRC IP and DST IP
-    if (data[12] != 0x08 || data[13] != 0x00)
-    {
-        printf(" Not an IPv4 packet\n");
-        return;
-    }
+    bool is_ipv4 = 0;
 
-    // 20 bytes for ipv4 header after ether header
-    if (header->caplen < 34)
-    {
-        printf(" Not a complete IPv4 header\n");
-        return;
-    }
-
-    // if ethernet is 0x0800 IPv4
+    // IPv4
     if (ether_type == 0x0800)
     {
         if (header->caplen < 34)
@@ -153,6 +191,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
             printf(" Not a complete IPv4 header\n");
             return;
         }
+        is_ipv4 = 1;
         int ip_header_length = (data[14] & 0x0F) * 4; // HLEN = 4bits, multiple of 4, 15th bit
         protocol = data[23];
 
@@ -164,14 +203,17 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     else if (ether_type == 0x86DD)
     {
         ipv6_count++;
+
         if (header->caplen < 54)
         {
             printf(" Not a complete IPv6 header\n");
             return;
         }
-        protocol = data[20];
 
-        printf(" SRC IPv6: ");
+        protocol = data[20]; // next header field in ipv6 header
+        t = 54;              // TCP/UDP header starts after 54 bytes of v6
+
+        printf("SRC IPv6: ");
         for (int i = 0; i < 16; i += 2)
         {
             printf("%02x%02x", data[22 + i], data[23 + i]);
@@ -181,7 +223,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
 
         printf("\n");
 
-        printf(" DST IPv6: ");
+        printf("DST IPv6: ");
         for (int i = 0; i < 16; i += 2)
         {
             printf("%02x%02x", data[38 + i], data[39 + i]);
@@ -189,17 +231,22 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
                 printf(":");
         }
         printf("\n");
+
+        printf("Hop limit: %d\n", data[21]);
     }
     // ARP Packet
     else if (ether_type == 0x0806)
     {
         arp_count++;
+
         printf(" ARP Packet\n");
+
         if (header->caplen < 42)
         {
             printf(" Not a complete ARP header\n");
             return;
         }
+
         printf(" SRC MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[22], data[23], data[24], data[25], data[26], data[27]);
         printf(" SRC IP: %d.%d.%d.%d\n", data[28], data[29], data[30], data[31]);
         printf(" DST MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[32], data[33], data[34], data[35], data[36], data[37]);
@@ -214,6 +261,8 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         non_ip_count++;
         return;
     }
+
+    // tranposrt layer TCP UDP ICMP
 
     if (protocol == 6)
     {
@@ -239,6 +288,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         printf("protocol ICMP\n");
         printf("ICMP Type: %d (%s)\n", icmp_type, icmp_name(icmp_type));
         printf("ICMP Code: %d\n", icmp_code);
+        return; // no ICMP ports to display
     }
     else
     {
@@ -247,11 +297,18 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         return;
     }
 
+    if (header->caplen < t + 4)
+    {
+        printf(" Not complete TCP/UDP Header");
+        return;
+    }
+
     int src_port = (data[34] << 8) | data[35];
     int dst_port = (data[36] << 8) | data[37];
     printf(" SRC PORT: %d (%s)\n", src_port, port_name(src_port));
     printf(" DST PORT: %d (%s)\n", dst_port, port_name(dst_port));
 
+    // tcp fields, <t+16 is incomplete header, t is the start of TCP header
     if (protocol == 6 && (int)header->caplen >= t + 20)
     {
         unsigned int seq = ((unsigned int)data[t + 4] << 24) | ((unsigned int)data[t + 5] << 16) |
@@ -265,6 +322,7 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         printf(" TCP Header Length: %d bytes\n", header_len);
         printf(" Sequence: %u\n", seq);
         printf(" Ack: %u\n", ack);
+
         printf(" Flags: ");
         if (flags & 0x02)
             printf("SYN ");
@@ -280,12 +338,48 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
             printf("URG ");
         printf("(0x%02x)\n", flags);
         printf(" Window: %d\n", window);
+        int i = connection_found(data + 26, data + 30, src_port, dst_port);
+
+        //
+        const char *state = "";
+        if (i >= 0)
+        {
+            Connection *c = &conns[i];
+            if ((flags & 0x02) && !(flags & 0x10))
+            {
+                c->syn_seen = 1;
+                state = "NEW (SYN)";
+            }
+            else if ((flags & 0x02) && (flags & 0x10))
+            {
+                c->synack_seen = 1;
+                state = "SYN-ACK";
+            }
+            else if (c->syn_seen && c->synack_seen && (flags & 0x10))
+            {
+                c->established = 1;
+                state = "ESTABLISHED";
+            }
+            else if (flags & 0x04)
+            {
+                state = "RESET";
+            }
+            else if (flags & 0x01)
+            {
+                state = "CLOSING";
+            }
+            else if (c->established)
+            {
+                state = "DATA";
+            }
+        }
+        printf(" Connection state: %s\n", state);
     }
     else if (protocol == 17) // UDP
     {
-        int udp_length = (data[38] << 8) | data[39];
+        int udp_length = (data[t + 4] << 8) | data[t + 5];
+        int udp_checksum = (data[t + 6] << 8) | data[t + 7];
         printf(" UDP Length: %d\n", udp_length);
-        int udp_checksum = (data[40] << 8) | data[41];
         printf(" UDP Checksum: 0x%04x\n", udp_checksum);
     }
 }

@@ -30,7 +30,9 @@
 8. Added ICMP protocol Handling, and updated TCP information
     - added `unasgined int` for large values 
     - Flags come from 12th byte of tcp header, each bit signifies omething like SYN, ACK, PSH etc
-    
+9. Added Connection Tracking and packet decoding improved
+    - `find_connection()` stores each connection and labels its state
+    - ports and UDP fields use t, which handles IPv4 options and IPv6
 
 ## Build and Run
 
