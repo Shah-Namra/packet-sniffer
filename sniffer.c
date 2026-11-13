@@ -48,6 +48,37 @@ void capture_stats()
     printf("ARP Packets: %ld\n", arp_count);
 }
 
+const char *icmp_name(int type)
+{
+    switch (type)
+    {
+    case 0:
+        return "Echo Reply";
+    case 3:
+        return "Destination Unreachable";
+    case 4:
+        return "Source Quench";
+    case 5:
+        return "Redirect";
+    case 8:
+        return "Echo Request";
+    case 11:
+        return "Time Exceeded";
+    case 12:
+        return "Parameter Problem";
+    case 13:
+        return "Timestamp Request";
+    case 14:
+        return "Timestamp Reply";
+    case 15:
+        return "Information Request";
+    case 16:
+        return "Information Reply";
+    default:
+        return "Unknown ICMP Type";
+    }
+}
+
 const char *port_name(int port)
 {
     switch (port)
@@ -83,7 +114,6 @@ const char *port_name(int port)
 
 // ipv6 address is 16 bytes long, print it in hex format with colons
 
-
 void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *data)
 {
     if (header->caplen < 14)
@@ -99,8 +129,8 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     printf(" Timestamp: %ld.%06ld\n", header->ts.tv_sec, header->ts.tv_usec);
 
     int ether_type = (data[12] << 8) | data[13];
-    int protocol = -1;   // 6 TCP, 17 UDP, anything else = other
-    int t = 0;           // where the TCP/UDP header starts
+    int protocol = -1; // 6 TCP, 17 UDP, anything else = other
+    int t = 0;         // where the TCP/UDP header starts
     // now for ipv4, SRC IP and DST IP
     if (data[12] != 0x08 || data[13] != 0x00)
     {
@@ -159,14 +189,13 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
                 printf(":");
         }
         printf("\n");
-
     }
     // ARP Packet
-    else if(ether_type == 0x0806)
+    else if (ether_type == 0x0806)
     {
         arp_count++;
         printf(" ARP Packet\n");
-        if(header ->caplen < 42)
+        if (header->caplen < 42)
         {
             printf(" Not a complete ARP header\n");
             return;
@@ -186,15 +215,30 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         return;
     }
 
-    if(protocol == 6)
+    if (protocol == 6)
     {
         tcp_count++;
         printf(" Protocol: TCP\n");
     }
-    else if(protocol == 17)
+    else if (protocol == 17)
     {
         udp_count++;
         printf(" Protocol: UDP\n");
+    }
+    else if (protocol == 1)
+    {
+        printf(" Protocol: ICMP\n");
+        if (header->caplen < t + 2)
+        {
+            printf(" Not complete ICMP Header");
+            return;
+        }
+        int icmp_type = data[t];
+        int icmp_code = data[t + 1];
+
+        printf("protocol ICMP\n");
+        printf("ICMP Type: %d (%s)\n", icmp_type, icmp_name(icmp_type));
+        printf("ICMP Code: %d\n", icmp_code);
     }
     else
     {
@@ -203,8 +247,47 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         return;
     }
 
+    int src_port = (data[34] << 8) | data[35];
+    int dst_port = (data[36] << 8) | data[37];
+    printf(" SRC PORT: %d (%s)\n", src_port, port_name(src_port));
+    printf(" DST PORT: %d (%s)\n", dst_port, port_name(dst_port));
 
-    
+    if (protocol == 6 && (int)header->caplen >= t + 20)
+    {
+        unsigned int seq = ((unsigned int)data[t + 4] << 24) | ((unsigned int)data[t + 5] << 16) |
+                           ((unsigned int)data[t + 6] << 8) | data[t + 7];
+        unsigned int ack = ((unsigned int)data[t + 8] << 24) | ((unsigned int)data[t + 9] << 16) |
+                           ((unsigned int)data[t + 10] << 8) | data[t + 11];
+        int header_len = (data[t + 12] >> 4) * 4; // data offset, in 4-byte words
+        unsigned char flags = data[t + 13];
+        int window = (data[t + 14] << 8) | data[t + 15];
+
+        printf(" TCP Header Length: %d bytes\n", header_len);
+        printf(" Sequence: %u\n", seq);
+        printf(" Ack: %u\n", ack);
+        printf(" Flags: ");
+        if (flags & 0x02)
+            printf("SYN ");
+        if (flags & 0x10)
+            printf("ACK ");
+        if (flags & 0x08)
+            printf("PSH ");
+        if (flags & 0x04)
+            printf("RST ");
+        if (flags & 0x01)
+            printf("FIN ");
+        if (flags & 0x20)
+            printf("URG ");
+        printf("(0x%02x)\n", flags);
+        printf(" Window: %d\n", window);
+    }
+    else if (protocol == 17) // UDP
+    {
+        int udp_length = (data[38] << 8) | data[39];
+        printf(" UDP Length: %d\n", udp_length);
+        int udp_checksum = (data[40] << 8) | data[41];
+        printf(" UDP Checksum: 0x%04x\n", udp_checksum);
+    }
 }
 
 int main(int argc, char *argv[])

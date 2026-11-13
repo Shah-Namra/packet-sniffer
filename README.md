@@ -27,6 +27,10 @@
     - ipv6 ips, arp request and reply details
     - `capture_stats()`
     - re arranged  `packet_got`
+8. Added ICMP protocol Handling, and updated TCP information
+    - added `unasgined int` for large values 
+    - Flags come from 12th byte of tcp header, each bit signifies omething like SYN, ACK, PSH etc
+    
 
 ## Build and Run
 
