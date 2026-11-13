@@ -16,7 +16,7 @@
 2. added gitignore file
 3. Added starter sniffer
 - `sniffer.c` : opens network interface and prints the size fo each packet it captures.
-
+4. Printed SRC Mac, DST Mac and timestamp, ethernet type, and captured size
 
 ## Build and Run
 
