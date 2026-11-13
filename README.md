@@ -23,7 +23,10 @@
 6. Added Port no. 
     - `port_name()`: shows the common ports to names
     - Ukown ports only prints the number
-
+7. Added summary and Stats
+    - ipv6 ips, arp request and reply details
+    - `capture_stats()`
+    - re arranged  `packet_got`
 
 ## Build and Run
 

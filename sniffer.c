@@ -30,6 +30,24 @@
 // 40-41 UDP Checksum
 // 42 onwards: Payload
 
+static long tcp_count = 0;
+static long udp_count = 0;
+static long other_ip_count = 0;
+static long non_ip_count = 0;
+static long ipv6_count = 0;
+static long arp_count = 0;
+
+void capture_stats()
+{
+    printf("\nCapture Statistics:\n");
+    printf("TCP Packets: %ld\n", tcp_count);
+    printf("UDP Packets: %ld\n", udp_count);
+    printf("Other IP Packets: %ld\n", other_ip_count);
+    printf("Non-IP Packets: %ld\n", non_ip_count);
+    printf("IPv6 Packets: %ld\n", ipv6_count);
+    printf("ARP Packets: %ld\n", arp_count);
+}
+
 const char *port_name(int port)
 {
     switch (port)
@@ -63,6 +81,9 @@ const char *port_name(int port)
     }
 }
 
+// ipv6 address is 16 bytes long, print it in hex format with colons
+
+
 void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *data)
 {
     if (header->caplen < 14)
@@ -77,6 +98,9 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
     printf(" Ethertype: 0x%02x%02x\n", data[12], data[13]);
     printf(" Timestamp: %ld.%06ld\n", header->ts.tv_sec, header->ts.tv_usec);
 
+    int ether_type = (data[12] << 8) | data[13];
+    int protocol = -1;   // 6 TCP, 17 UDP, anything else = other
+    int t = 0;           // where the TCP/UDP header starts
     // now for ipv4, SRC IP and DST IP
     if (data[12] != 0x08 || data[13] != 0x00)
     {
@@ -90,49 +114,97 @@ void packet_got(u_char *unused, const struct pcap_pkthdr *header, const u_char *
         printf(" Not a complete IPv4 header\n");
         return;
     }
-    int ip_header_length = (data[14] & 0x0F) * 4;
-    int protocol = data[23];
 
-    printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
-    printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
+    // if ethernet is 0x0800 IPv4
+    if (ether_type == 0x0800)
+    {
+        if (header->caplen < 34)
+        {
+            printf(" Not a complete IPv4 header\n");
+            return;
+        }
+        int ip_header_length = (data[14] & 0x0F) * 4; // HLEN = 4bits, multiple of 4, 15th bit
+        protocol = data[23];
 
-    // printf(" Version: %d\n", data[14] >> 4);
-    // printf(" IP Header Length: %d bytes\n", ip_header_length);
-    // printf(" TOS: 0x%02x\n", data[15]);
-    // printf(" Total Length: %d\n", (data[16] << 8) | data[17]);
-    // printf(" Identification: 0x%02x%02x\n", data[18], data[19]);
-    // printf(" Flags: %d\n", (data[20] >> 5) & 0x07);
-    // printf(" Fragment Offset: %d\n", ((data[20] & 0x1F) << 8) | data[21]);
-    // printf(" TTL: %d\n", data[22]);
-    // printf(" Protocol: %d\n", data[23]);
-    // printf(" Header Checksum: 0x%02x%02x\n", data[24], data[25]);
-    // printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
-    // printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
+        printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
+        printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
+    }
 
-    // for tcp udp
-    //
-    int transport_header_offset = 14 + ip_header_length;
-    if (protocol == 6)
-        printf(" Protocol: TCP\n");
-    else if (protocol == 17)
-        printf(" Protocol: UDP\n");
+    // for ipv6
+    else if (ether_type == 0x86DD)
+    {
+        ipv6_count++;
+        if (header->caplen < 54)
+        {
+            printf(" Not a complete IPv6 header\n");
+            return;
+        }
+        protocol = data[20];
+
+        printf(" SRC IPv6: ");
+        for (int i = 0; i < 16; i += 2)
+        {
+            printf("%02x%02x", data[22 + i], data[23 + i]);
+            if (i < 14)
+                printf(":");
+        }
+
+        printf("\n");
+
+        printf(" DST IPv6: ");
+        for (int i = 0; i < 16; i += 2)
+        {
+            printf("%02x%02x", data[38 + i], data[39 + i]);
+            if (i < 14)
+                printf(":");
+        }
+        printf("\n");
+
+    }
+    // ARP Packet
+    else if(ether_type == 0x0806)
+    {
+        arp_count++;
+        printf(" ARP Packet\n");
+        if(header ->caplen < 42)
+        {
+            printf(" Not a complete ARP header\n");
+            return;
+        }
+        printf(" SRC MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[22], data[23], data[24], data[25], data[26], data[27]);
+        printf(" SRC IP: %d.%d.%d.%d\n", data[28], data[29], data[30], data[31]);
+        printf(" DST MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[32], data[33], data[34], data[35], data[36], data[37]);
+        printf(" DST IP: %d.%d.%d.%d\n", data[38], data[39], data[40], data[41]);
+
+        return;
+    }
+    // Something else
     else
     {
+        printf(" Not an IPv4 or IPv6 packet\n");
+        non_ip_count++;
+        return;
+    }
+
+    if(protocol == 6)
+    {
+        tcp_count++;
+        printf(" Protocol: TCP\n");
+    }
+    else if(protocol == 17)
+    {
+        udp_count++;
+        printf(" Protocol: UDP\n");
+    }
+    else
+    {
+        other_ip_count++;
         printf(" Protocol: Other (%d)\n", protocol);
         return;
     }
 
-    // 4 bytes for ports
-    if (header->caplen < transport_header_offset + 4)
-    {
-        printf(" Not a complete transport header\n");
-        return;
-    }
 
-    int src_port = (data[transport_header_offset] << 8) | data[transport_header_offset + 1];
-    int dst_port = (data[transport_header_offset + 2] << 8) | data[transport_header_offset + 3];
-    printf(" SRC PORT: %d (%s)\n", src_port, port_name(src_port));
-    printf(" DST PORT: %d (%s)\n", dst_port, port_name(dst_port));
+    
 }
 
 int main(int argc, char *argv[])
@@ -152,10 +224,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (pcap_loop(pcap, 1, packet_got, NULL) == -1)
+    if (pcap_loop(pcap, 25, packet_got, NULL) == -1)
     {
         printf("Error: %s\n", pcap_geterr(pcap));
     }
+    capture_stats();
     pcap_close(pcap);
     return 0;
 }
