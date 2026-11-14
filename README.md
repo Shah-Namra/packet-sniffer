@@ -33,16 +33,23 @@
 9. Added Connection Tracking and packet decoding improved
     - `find_connection()` stores each connection and labels its state
     - ports and UDP fields use t, which handles IPv4 options and IPv6
-10. 
-    - the transport header position `t` was not dynamic and TCP UDP ICMP was read fixed byte position. 
-that gave wrong ports icmp types and tcp header lengths
-    - t is now cacl. as `14 + HLEN*4` for ipv4 (54 for v6) and every port tcp udp and icmp reads it 
+10. The transport header position `t` was not dynamic and TCP UDP ICMP was read fixed byte position. 
+    - that gave wrong ports icmp types and tcp header lengths
+    - `t` is now cacl. as `14 + HLEN*4` for ipv4 (54 for v6) and every port tcp udp and icmp reads it 
 11. Saved caputre in `out.pcap`: pcap_dump write every packet, and u can open it in wireshark
     - added fragment offset  and skip ip fragments
 12. Counted bytes/portocol 
     - updated `capture_stats()` and added a table like thing to show no. of captures and bytes
     -  TCP UDP ICMP ARP IPv6 other IPv4 and non-IP and the toal
     - each protocols bytes use the full packet length (`header-> length`)
+13. Refactored the project into smaller files 
+    - Added `notes.md` file, little bit of theory file layout and build steps (AI Generated)
+    - `main.c` setup, datalink, filter, dump file and capture loop
+    - `decode.c`: `packet_got` decodes each frame
+    - `connections.c`: tracks tcp and udp connection
+    - `stats.c`: pre protocol counters and capture stats
+    - `names.c`: name lookups like icmp and port
+    - `sniffer.h`: constants, `connection` struct and shared declarations
 
 
 ## Build and Run
