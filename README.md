@@ -66,6 +66,10 @@
 16. Added HTTP
     - decoded the plain request lines, `host` header and status lines on the poert 80 
     - `http.c` file and `http_print()` 
+17. Added ARP operations and spoof check
+    - `security.c` triggers / warns when the IPs MAC Changes
+    - `req` and `res` show correctly with ping, need to do practical idk how joiyee
+
 
 ## Build and Run
 

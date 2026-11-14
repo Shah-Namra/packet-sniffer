@@ -161,12 +161,18 @@ void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_ch
             printf(" Not a complete ARP header\n");
             return;
         }
-
+        // ARP operation: 1 = request ("who has"), 2 = reply ("is at")
+        int arp_op = (data[20] << 8) | data[21];
+        printf(" ARP Operation: %s\n",
+               arp_op == 1 ? "Request (who has)" : arp_op == 2 ? "Reply (is at)"
+                                                               : "Other");
         // Sender MAC and IP, then target MAC and IP
         printf(" SRC MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[22], data[23], data[24], data[25], data[26], data[27]);
         printf(" SRC IP: %d.%d.%d.%d\n", data[28], data[29], data[30], data[31]);
         printf(" DST MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", data[32], data[33], data[34], data[35], data[36], data[37]);
         printf(" DST IP: %d.%d.%d.%d\n", data[38], data[39], data[40], data[41]);
+
+        arp_check(data + 28, data + 22);
 
         return;
     }

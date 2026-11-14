@@ -47,5 +47,5 @@ void capture_stats(void);
 void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_char *data);
 
 void print_http(const u_char *p, int len);
-
+void arp_check(const u_char *ip, const u_char *mac);
 #endif
