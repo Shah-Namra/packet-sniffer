@@ -50,11 +50,24 @@
     - `stats.c`: pre protocol counters and capture stats
     - `names.c`: name lookups like icmp and port
     - `sniffer.h`: constants, `connection` struct and shared declarations
-
+14. Added BPF Filter and makefile clean rule, 
+    - `sudo ./sniffer <interface> "<bpf filter>"`, for example "tcp port 443"
+    - Tested with icmp and arp caputre `icmp` and `arp` and also `tcp port 443` filter
+    - icmp: echo req and reply pairs from `ping`
+    - arp: req and reply from `ping` the router
 
 ## Build and Run
 
 ```bash
 gcc sniffer.c -o sniffer -lpcap
 sudo ./sniffer wlan0
+```
+
+OR
+
+```
+make
+sudo ./sniffer <interface>
+sudo ./sniffer <interface> "<bpf filter>"
+make clean
 ```
