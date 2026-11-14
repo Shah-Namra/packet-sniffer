@@ -55,6 +55,14 @@
     - Tested with icmp and arp caputre `icmp` and `arp` and also `tcp port 443` filter
     - icmp: echo req and reply pairs from `ping`
     - arp: req and reply from `ping` the router
+15. Added DNS queries and responses from UDP and TCP
+    - as it is same port for both tcp and udp which is 53 
+    - 12 byte header with 2 byte id and 2 byte flgas and then 4 2bytes cpunts for questions answers auth and addition records
+    - www.google.com becomes 3 wwww 6 google 3 com 0
+    - the 0 marks the end 
+    - after the name 2 btytes for the query type 
+    - 1=A, v4 address ; 28 = AAAA, v6 address
+    - response 0 and 2, success and server fail 
 
 ## Build and Run
 

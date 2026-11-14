@@ -1,5 +1,59 @@
 #include <stdio.h>
 #include "sniffer.h"
+#include <string.h>
+
+// Prints the DNS header and the first question name.
+// dns points to the first byte of the DNS message; len is how many bytes are left.
+static void print_dns(const u_char *dns, int len)
+{
+    if (len < 12)
+    {
+        printf(" DNS: message too short\n");
+        return;
+    }
+
+    unsigned id = (dns[0] << 8) | dns[1];
+    unsigned flags = (dns[2] << 8) | dns[3];
+    int is_response = (flags >> 15) & 1; // 1 = response, 0 = query
+    int rcode = flags & 0x0F;            // response code: 0 = OK
+    unsigned qcount = (dns[4] << 8) | dns[5];
+
+    printf(" DNS ID: 0x%04x\n", id);
+    printf(" DNS Type: %s\n", is_response ? "Response" : "Query");
+    printf(" DNS Questions: %u\n", qcount);
+
+    if (qcount == 0)
+        return;
+
+    // Read the first question name: labels, ending with a zero byte
+    char name[256] = "";
+    size_t n = 0;
+    int pos = 12;
+
+    while (pos < len && dns[pos] != 0)
+    {
+        int label = dns[pos];
+        if (label & 0xC0 || pos + 1 + label > len || n + label + 1 >= sizeof(name))
+            break; // compressed or broken name: stop
+        if (n > 0)
+            name[n++] = '.';
+        memcpy(name + n, dns + pos + 1, label);
+        n += label;
+        pos += label + 1;
+    }
+
+    name[n] = '\0';
+    printf(" DNS Query Name: %s\n", name);
+
+    if (pos + 2 < len)
+    {
+        unsigned qtype = (dns[pos + 1] << 8) | dns[pos + 2];
+        printf(" DNS Query Type: %u\n", qtype);
+    }
+
+    if (is_response)
+        printf(" DNS Response Code: %d\n", rcode);
+}
 
 // Called by pcap_loop once for every captured packet.
 // dumper_arg is the out.pcap file handle, passed in from main.
@@ -44,14 +98,14 @@ void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_ch
 
         // HLEN 4 bit field, multiply 4 to get the ipv4 header size, and after that Transport layer starts
         // 0x0F = 15
-        protocol = data[23];        t = 14 + (data[14] & 0x0F) * 4;
-
+        protocol = data[23];
+        t = 14 + (data[14] & 0x0F) * 4;
 
         printf(" SRC IP: %d.%d.%d.%d\n", data[26], data[27], data[28], data[29]);
         printf(" DST IP: %d.%d.%d.%d\n", data[30], data[31], data[32], data[33]);
 
-        // only first fragment of the ip packet carries transport header, which hold port no. 
-        // fragements after that dont contain 
+        // only first fragment of the ip packet carries transport header, which hold port no.
+        // fragements after that dont contain
         // so this checks fragment offset if its not 0 it prints a note and skips port parsing
         int frag_offset = ((data[20] & 0x1F) << 8) | data[21];
         if (frag_offset != 0)
@@ -83,7 +137,7 @@ void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_ch
                 printf(":");
         }
         printf("\n");
-        
+
         printf("DST IPv6: ");
         for (int i = 0; i < 16; i += 2)
         {
@@ -245,6 +299,13 @@ void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_ch
             }
         }
         printf(" Connection state: %s\n", state);
+
+        if (src_port == 53 || dst_port == 53)
+        {
+            int dns_start = t + header_len + 2;
+            if (dns_start < len)
+                print_dns(data + dns_start, len - dns_start);
+        }
     }
     // UDP fields length and checksum (8 byte header)
     else if (protocol == 17)
@@ -256,5 +317,11 @@ void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_ch
         }
         printf(" UDP Length: %d\n", (data[t + 4] << 8) | data[t + 5]);
         printf(" UDP Checksum: 0x%04x\n", (data[t + 6] << 8) | data[t + 7]);
+
+        //
+        if (src_port == 53 || dst_port == 53)
+        {
+            print_dns(data + t + 8, header->caplen - (t + 8));
+        }
     }
-}
+};
