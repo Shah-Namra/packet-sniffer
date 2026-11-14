@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include "sniffer.h"
 #include <string.h>
-
 // Prints the DNS header and the first question name.
 // dns points to the first byte of the DNS message; len is how many bytes are left.
 static void print_dns(const u_char *dns, int len)
@@ -299,7 +298,10 @@ void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_ch
             }
         }
         printf(" Connection state: %s\n", state);
-
+        if ((src_port == 80 || dst_port == 80) && len > t + header_len)
+        {
+            print_http(data + t + header_len, len - (t + header_len));
+        }
         if (src_port == 53 || dst_port == 53)
         {
             int dns_start = t + header_len + 2;

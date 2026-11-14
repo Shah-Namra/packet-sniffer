@@ -63,6 +63,9 @@
     - after the name 2 btytes for the query type 
     - 1=A, v4 address ; 28 = AAAA, v6 address
     - response 0 and 2, success and server fail 
+16. Added HTTP
+    - decoded the plain request lines, `host` header and status lines on the poert 80 
+    - `http.c` file and `http_print()` 
 
 ## Build and Run
 

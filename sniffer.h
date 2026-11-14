@@ -46,4 +46,6 @@ void capture_stats(void);
 // decode.c: decode one packet (called by pcap_loop)
 void packet_got(u_char *dumper_arg, const struct pcap_pkthdr *header, const u_char *data);
 
+void print_http(const u_char *p, int len);
+
 #endif
